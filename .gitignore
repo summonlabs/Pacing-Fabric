@@ -1,0 +1,42 @@
+# Build trees
+build/
+build-*/
+out/
+cmake-build*/
+
+# Local build and validation logs
+*.log
+*_log.txt
+build_log.txt
+install_log.txt
+asan_log.txt
+analyze_log.txt
+mp.txt
+gov.txt
+p.txt
+a.txt
+c.txt
+r.txt
+
+# Local helper scripts (not part of the product)
+build_*.bat
+
+# Editor and OS debris
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.swp
+*~
+Thumbs.db
+desktop.ini
+
+# Crash and diagnostic artifacts
+*.dmp
+*.pdb
+*.ilk
+*.obj
+*.exe
+*.lib
+*.exp
