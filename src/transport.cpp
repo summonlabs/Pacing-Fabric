@@ -377,7 +377,9 @@ Status FrameListener::listen_loopback(u16 port, u16& bound_port) {
   if (to_handle(s) == kInvalid) return Status::of(ErrorCode::IoFailure, "listener socket creation failed");
   const int reuse = 1;
 #if defined(_WIN32)
-  (void)::setsockopt(s, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&reuse), sizeof(reuse));
+  // SO_REUSEADDR on Windows lets a second socket bind a port that is still
+  // listening; exclusive use makes that second bind fail instead.
+  (void)::setsockopt(s, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, reinterpret_cast<const char*>(&reuse), sizeof(reuse));
 #else
   (void)::setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
 #endif

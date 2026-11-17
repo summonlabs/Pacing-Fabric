@@ -54,18 +54,36 @@ u64 get_u64(const u8* p) {
 // open for reading (an indexer or a scanner, for example); retrying is a
 // robustness measure, never a correctness shortcut, and the loop is bounded.
 bool replace_atomically(const std::string& source, const std::string& target, std::string& error) {
+#if defined(_WIN32)
+  // A reader holds the destination for as long as it reads it, which is far
+  // longer than a few milliseconds, so the bound is about 2 s. Only sharing and
+  // lock errors are retried; anything else (a directory in the way) fails at
+  // once.
+  constexpr int kMaxAttempts = 100;
+  constexpr auto kRetryDelay = std::chrono::milliseconds(20);
+#else
   constexpr int kMaxAttempts = 8;
+  constexpr auto kRetryDelay = std::chrono::milliseconds(5);
+#endif
   for (int attempt = 0; attempt < kMaxAttempts; ++attempt) {
 #if defined(_WIN32)
     if (::MoveFileExA(source.c_str(), target.c_str(),
                       MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != FALSE) {
       return true;
     }
+    const DWORD code = ::GetLastError();
+    const DWORD attributes = ::GetFileAttributesA(target.c_str());
+    const bool directory =
+        attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+    if ((code != ERROR_ACCESS_DENIED && code != ERROR_SHARING_VIOLATION && code != ERROR_LOCK_VIOLATION) ||
+        directory) {
+      break;
+    }
 #else
     if (std::rename(source.c_str(), target.c_str()) == 0) return true;
 #endif
     if (attempt + 1 < kMaxAttempts) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(5));
+      std::this_thread::sleep_for(kRetryDelay);
     }
   }
   error = "atomic snapshot replacement failed";

@@ -3,10 +3,12 @@
 // Copyright 2026 Summon Software Labs.
 // SPDX-License-Identifier: Apache-2.0
 
+#include <chrono>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "framework.hpp"
@@ -555,4 +557,30 @@ PF_TEST(durability, no_directory_means_no_durability) {
   const DurabilityReport report = h.fabric->durability_report();
   PF_CHECK(!report.snapshot_present);
   PF_CHECK(!report.journal_present);
+}
+
+PF_TEST(durability, a_checkpoint_waits_for_a_reader_of_the_snapshot_to_close) {
+  TempDir dir("checkpoint-reader");
+  Limits limits{};
+  DurableStore store(dir.path(), limits);
+  PF_CHECK_OK(store.open());
+  std::vector<DurableRecord> compacted;
+  compacted.push_back(make_record(DurableRecordType::Meta, 1, {9, 9}));
+  PF_CHECK_OK(store.checkpoint(compacted));
+  bool reader_opened = false;
+  bool checkpointed = false;
+  {
+    // Another tool reading the store (an inspection, a scan) holds the snapshot
+    // open while the next checkpoint replaces it, and closes it shortly after.
+    std::ifstream reader(store.snapshot_path(), std::ios::binary);
+    reader_opened = reader.is_open();
+    std::thread writer([&store, &compacted, &checkpointed] { checkpointed = store.checkpoint(compacted).ok(); });
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    reader.close();
+    writer.join();
+  }
+  PF_CHECK(reader_opened);
+  // The checkpoint is not lost because a reader had the snapshot open for a moment.
+  PF_CHECK(checkpointed);
+  PF_CHECK_OK(store.close());
 }

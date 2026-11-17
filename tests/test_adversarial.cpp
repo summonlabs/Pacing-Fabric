@@ -680,3 +680,17 @@ PF_TEST(adversarial, a_closed_connection_refuses_further_frames) {
   PF_CHECK_STATUS_CODE(listener.accept(accepted), ErrorCode::InvalidState);
   transport_global_shutdown();
 }
+
+PF_TEST(adversarial, a_second_listener_cannot_take_a_listening_port) {
+  PF_CHECK_OK(transport_global_init());
+  FrameListener first;
+  u16 port = 0;
+  PF_CHECK_OK(first.listen_loopback(0, port));
+  FrameListener second;
+  u16 second_port = 0;
+  // Two control servers must never share one listening port: the second bind fails.
+  PF_CHECK(!second.listen_loopback(port, second_port).ok());
+  second.close();
+  first.close();
+  transport_global_shutdown();
+}
